@@ -8,10 +8,11 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
+import slick.jdbc.PostgresProfile.api._
+import slick.jdbc.meta.MTable
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.control.NonFatal
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 
@@ -22,10 +23,26 @@ object EventsWebServer extends App with EventsRoutes with JsonSupport {
   implicit val system: ActorSystem = ActorSystem("eventsAkkaHttpServer")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContext = system.dispatcher
-  val eventRegistryActor: ActorRef = system.actorOf(EventRegistryActor.props, "eventRegistryActor")
+  val db1 = Database.forConfig("slick-postgres")
+  val eventRegistryActor: ActorRef = system.actorOf(EventRegistryActor.props(db1), "eventRegistryActor")
 
   lazy val routes: Route = eventRoutes
   implicit val timeout: Timeout = Timeout(50 seconds)
+
+
+  try {
+    def createTableIfNotInTables(tables: Vector[MTable]): Future[Unit] = {
+      if (!tables.exists(_.name.name == pCalendar.baseTableRow.tableName)) {
+        db1.run(pCalendar.schema.create)
+      } else {
+        Future()
+      }
+    }
+
+    val createTableIfNotExist: Future[Unit] = db1.run(MTable.getTables).flatMap(createTableIfNotInTables)
+    Await.result(createTableIfNotExist, Duration.Inf)
+  }
+
 
   lazy val eventRoutes: Route =
     path("allEvents") {
@@ -85,18 +102,21 @@ object EventsWebServer extends App with EventsRoutes with JsonSupport {
       system.terminate()
   }
 
+system.registerOnTermination(db1.close())
+//  try {
+//    sys.addShutdownHook {
+//      serverBinding.flatMap(_.unbind())
+//      system.terminate()
+//      db1.close()
+//    }
+//  }
+//  catch {
+//    case NonFatal(e) =>
+//      println("Failed to start Web Server application.", e)
+//      system.terminate()
+//      db1.close()
+//  }
 
-  try {
-    sys.addShutdownHook {
-      serverBinding.flatMap(_.unbind())
-      system.terminate()
-    }
-  }
-  catch {
-    case NonFatal(e) =>
-      println("Failed to start Web Server application.", e)
-      system.terminate()
-  }
 
 }
 

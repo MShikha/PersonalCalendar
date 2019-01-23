@@ -9,7 +9,7 @@ import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
 import org.scalatest.{Matchers, WordSpec}
-
+import slick.jdbc.PostgresProfile.api._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -17,8 +17,10 @@ import scala.util.{Failure, Success}
 class EventsRoutesSpecRoutesSpec extends WordSpec with Matchers  with ScalatestRouteTest
   with EventsRoutes with JsonSupport {
 
+  val db1 = Database.forConfig("slick-postgres")
+
   val eventRegistryActor: ActorRef =
-    system.actorOf(EventRegistryActor.props, "eventsRegistry")
+    system.actorOf(EventRegistryActor.props(db1), "eventsRegistry")
   implicit val timeout: Timeout = Timeout(50 seconds)
 
 
